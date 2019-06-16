@@ -2,7 +2,7 @@ import * as React from 'react'
 
 type Props<C> = C extends React.ComponentType<infer P> ? P : {}
 // for ergonomic reason, T should not be of function type
-type Update<T> =
+export type Update<T> =
   | { (_: T): Partial<T> }
   | Partial<T>
 
@@ -16,37 +16,33 @@ const reducer = <T>(state: T, update: Update<T>): T => {
     : state
 }
 
-const createAdapter = <T>(hook: (any) => T): StatefulProvider<T>['connect'] =>
-  (map = (_ => _) as any, {
-    getContext = hook,
-    displayName
-  } = map as any) => component => {
+const createConnect = <T>(hook: () => T): ProviderModule<T>['connect'] =>
+  (map = (_ => _) as any) => component => {
     const memoised = React.memo(component)
 
     return props => React.createElement(
       memoised as any,
-      { ...props, ...map(getContext(props), props) }
+      { ...props, ...map(hook(), props) }
     )
   }
 
-type StatefulProvider<T, P = {}> =
-& React.ComponentType<P & { children: React.ReactNode }>
-& { connect<V, O = {}>(map?: (context: T, props: O) => V, options?: {
-    getContext?: (props?: O) => T,
-    displayName?: string
-  }): <Props extends O>(_: React.ComponentType<Props>) => React.ComponentType<Props & V> }
-& {
-  context: React.Context<T> // maybe not expose this since it's leaky
-  useService(): T } // the React team advises that all hooks' names should start with "use"
+type Adapter<T, P, V> = (context: T, props: P) => V
 
-const StatefulProvider = <T, P = {}>(
-  factory: (getNextToMerge: (updater: Update<T>) => void, providerProps: P) => T
-): StatefulProvider<T, P> => {
+export type ProviderModule<T, P = {}> = {
+  (): T // hook
+  Provider: React.ComponentType<P & { children: React.ReactNode }>
+  connect<V, O = {}>(map?: Adapter<T, O, V>):
+    <Props extends O>(_: React.ComponentType<Props>) => React.ComponentType<Props & V>
+}
+
+const createHook = <T, P = {}>(
+  factory: (getNextToMerge: (_: Update<T>) => void, providerProps: P) => T
+): ProviderModule<T, P> => {
   const context = React.createContext<T>({} as any)
-  const useService = () => React.useContext(context)
-  const connect: any = createAdapter(useService)
+  const hook = () => React.useContext(context)
+  const connect: any = createConnect(hook)
 
-  const Provider = (props: Props<StatefulProvider<T, P>>) => {
+  const Provider = (props: Props<ProviderModule<T, P>['Provider']>) => {
     const { children, ...providerProps } = props
 
     const [ value, dispatch ] = React.useReducer(
@@ -63,13 +59,7 @@ const StatefulProvider = <T, P = {}>(
     return React.createElement(context.Provider, { children, value })
   }
 
-  const { name } = factory
-
-  return Object.assign(
-    Provider,
-    { connect, context, useService },
-    name && { displayName: name }
-  )
+  return Object.assign(hook, { Provider, connect })
 }
 
-export default StatefulProvider
+export default createHook
