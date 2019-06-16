@@ -1,0 +1,10 @@
+{
+  "devDependencies": {
+    "@types/jest": "^24.0.14",
+    "jest": "^24.8.0",
+    "typescript": "^3.5.2"
+  },
+  "dependencies": {
+    "react": "^16.8.6"
+  }
+}
