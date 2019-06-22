@@ -8,19 +8,25 @@ type Adapter<T, HookProps extends {} = {}> = <Map extends MapProps<T> = MapProps
     & Pick<P, Exclude<keyof P, keyof Injected>>
   >
 
-const createAdapter = <T, P = {}>(hook: (_?: P) => T): Adapter<T, P> =>
+const getDisplayName = ({ name, displayName }: React.ComponentType<any>) => displayName || name
+
+const createAdapter = <T, P = {}>(useHook: (_?: P) => T): Adapter<T, P> =>
   (map = (_ => _) as any) => component => {
     const memoised = React.memo(component)
 
-    return (props: P) => React.createElement(
-      memoised as any,
-      { ...map(hook(props), props), ...props }
+    return Object.assign(
+      function C (props: P) {
+        return React.createElement(memoised, {
+          ...map(useHook(props), props),
+          ...props
+        })
+      },
+      { displayName: `${map.name || mapProps.name}(${getDisplayName(component)})` }
     )
   }
 
 type MapProps<From = any, To = any, Props extends {} = {}> = (_: From, options?: Props) => To
 type Options<A extends MapProps> = A extends MapProps<any, any, infer P> ? P : {}
-
 
 type Mutations<T> = {
   [K in keyof T]: T[K] extends (..._) => any
@@ -30,14 +36,14 @@ type Mutations<T> = {
 
 const createMutations = <T, M extends Updates<T>>(
   updates: M,
-  dispatch: (_ :Update<T>) => void
+  dispatch: (_: Update<T>) => void
 ) => {
   const mutations: Partial<Mutations<M>> = {}
   for (const action in updates) {
     const update = updates[action]
     mutations[action] = ((...args) => dispatch(
       typeof update === 'function'
-        ? update(...args)
+        ? (update as any)(...args)
         : update
     )) as any
   }
@@ -48,17 +54,15 @@ const createMutations = <T, M extends Updates<T>>(
 export type ProviderModule<T, P = {}> = {
   (): T // hook
   Adapter: Adapter<T>
-  Provider: React.ForwardRefExoticComponent<ProviderProps<T, P>>
+  Provider: React.ForwardRefExoticComponent<
+    & React.PropsWithoutRef<ProviderProps<P>>
+    & React.RefAttributes<T>
+  >
 }
 
-type ProviderProps<T, P> = P & {
-  ref?: React.Ref<T>
-  children: React.ReactNode
-}
+type ProviderProps<P> = P & { children: React.ReactNode }
 
 const useUnboundRef = <T>(value, ref?: React.Ref<T>) => {
-  if (!ref) return
-
   let functionRef = ref as (_?: T) => void
   if (typeof ref !== 'function') {
     const mutableRef = ref as React.MutableRefObject<T>
@@ -66,6 +70,8 @@ const useUnboundRef = <T>(value, ref?: React.Ref<T>) => {
   }
 
   React.useEffect(() => {
+    if (!ref) return
+
     functionRef(value)
     return () => functionRef(null)
   }, [])
@@ -78,7 +84,7 @@ export const createStore = <
 >(
   factory: (_?: Props) => State,
   updates: UpdateFactories = {} as any
-) => (initial: Props): State & Mutations<UpdateFactories> => {
+) => function useStore (initial: Props): State & Mutations<UpdateFactories> {
   const make = () => {
     const model = factory(initial)
 
@@ -102,15 +108,15 @@ const createHook = <
 >(
   initial: (_?: Props) => State,
   updates: UpdateFactories = {} as any
-): ProviderModule<State & Mutations<UpdateFactories>, Props> => {
+) => {
   const context = React.createContext({})
-  const hook = () => React.useContext(context)
-  const Adapter = createAdapter(hook)
+  const useBoundContext = () => React.useContext(context)
+  const Adapter = createAdapter(useBoundContext)
   const useStore = createStore(initial, updates)
 
   type Service = ReturnType<typeof useStore>
 
-  const Provider = React.forwardRef<Service, ProviderProps<Props, Service>>((props, ref) => {
+  const Provider = React.forwardRef<Service, ProviderProps<Props>>((props, ref) => {
     const { children, ...providerProps } = props
 
     const value = useStore(providerProps as any)
@@ -119,7 +125,7 @@ const createHook = <
     return React.createElement(context.Provider, { children, value })
   })
 
-  return Object.assign(hook, { Provider, Adapter })
+  return Object.assign(useBoundContext, { Provider, Adapter }) as ProviderModule<Service, Props>
 }
 
 export default createHook
@@ -129,14 +135,13 @@ export type Service<T extends ProviderModule<any>> = ReturnType<T>
 // for ergonomic reason, T should not be of function type
 export type Update<T> = { (_: T): void | Partial<T> }
 
-
 type Updates<T> = Record<string,
-| ((..._) => Update<T> )
+| ((..._) => Update<T>)
 | Partial<T>
 >
 
 const reducer = <T>(state: T, update: Update<T>): T => {
-  const nextState = typeof update == 'function'
+  const nextState = typeof update === 'function'
     ? update(state)
     : update
 
