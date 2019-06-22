@@ -1,9 +1,5 @@
 {
   "extends": [
-    "tslint-config-standard",
-    "tslint-react-hooks"
-  ],
-  "rules": {
-    "react-hooks-nesting": "error"
-  }
+    "scripts/ts-lib/tslint.json"
+  ]
 }

@@ -8,20 +8,20 @@ type Adapter<T, HookProps extends {} = {}> = <Map extends MapProps<T> = MapProps
     & Pick<P, Exclude<keyof P, keyof Injected>>
   >
 
-const getDisplayName = ({ name, displayName }: React.ComponentType<any>) => displayName || name
+const debugId = ({ name = '', displayName }: any) => displayName || name
 
-const createAdapter = <T, P = {}>(useHook: (_?: P) => T): Adapter<T, P> =>
+const createAdapter = <T, P = {}>(hook: (_?: P) => T): Adapter<T, P> =>
   (map = (_ => _) as any) => component => {
     const memoised = React.memo(component)
 
     return Object.assign(
-      function C (props: P) {
-        return React.createElement(memoised, {
-          ...map(useHook(props), props),
-          ...props
-        })
-      },
-      { displayName: `${map.name || mapProps.name}(${getDisplayName(component)})` }
+      (props: P) => React.createElement(memoised, {
+        ...map(hook(props), props),
+        ...props
+      }),
+      { displayName: `${debugId(hook)}(${map.name || mapProps.name})` +
+        `(${debugId(component)})`
+      }
     )
   }
 
@@ -150,5 +150,4 @@ const reducer = <T>(state: T, update: Update<T>): T => {
     : state
 }
 
-export const mapProps = <T, P>(hook: (_: P) => T) => createAdapter(hook)()
-// shorthand
+export const mapProps = <T, P>(map: (_: P) => T) => createAdapter(map)()

@@ -1,23 +1,23 @@
 {
   "scripts": {
-    "test": "jest",
-    "lint": "tslint -e 'node_modules/**' '**/*.ts?'"
+    "start": "builder",
+    "concurrent": "builder concurrent"
   },
+  "files": [
+    "lib"
+  ],
+  "main": "lib/index.js",
+  "module": "lib/index.es",
+  "typings": "lib/index.d.ts",
   "devDependencies": {
-    "@babel/preset-env": "^7.4.5",
-    "@babel/preset-react": "^7.0.0",
-    "@babel/preset-typescript": "^7.3.3",
     "@testing-library/react": "^8.0.1",
     "@types/jest": "^24.0.14",
     "@types/node": "^12.0.8",
     "@types/react": "^16.8.20",
+    "builder": "^4.0.0",
     "install-peers": "^1.0.3",
-    "jest": "^24.8.0",
     "react-dom": "^16.8.6",
-    "tslint": "^5.17.0",
-    "tslint-config-standard": "^8.0.1",
-    "tslint-react-hooks": "^2.1.1",
-    "typescript": "^3.5.2"
+    "scripts__ts-lib": "file://./scripts/ts-lib"
   },
   "peerDependencies": {
     "react": "^16.8.6"

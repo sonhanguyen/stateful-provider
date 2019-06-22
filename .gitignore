@@ -1,3 +1,9 @@
+# tsc
+tsconfig.tsbuildinfo
+
+# rollup-plugin-typescript2
+.*_cache
+
 # parcel
 .cache
 dist

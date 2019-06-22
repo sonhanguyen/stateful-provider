@@ -1,0 +1,9 @@
+{
+  "extends": "./scripts/ts-lib/tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationDir": "lib"
+  },
+  "files": [ "index.ts" ]
+}
