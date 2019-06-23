@@ -1,7 +1,7 @@
 import * as React from 'react'
 import createHook, { Service } from '.'
-import { render } from '@testing-library/react'
-import assert from 'assert'
+import { render, act } from '@testing-library/react'
+import assert, { AssertionError } from 'assert'
 
 const factory = jest.fn((props: { on?: true }) => ({
   isOn: !!props.on,
@@ -28,6 +28,7 @@ const Test = jest.fn((viewModel: Service<typeof useService>) =>
 
 const lastProps = ({ mock }: jest.Mock) => {
   const [[ props ]] = mock.calls
+
   return props
 }
 
@@ -117,7 +118,7 @@ describe('Stateful', () => {
 })
 
 describe('hoc', () => {
-  it('Should not rerender if viewModel is unchanged', () => {
+  it('Should NOT rerender if viewModel is unchanged', () => {
     const { container } = render(
       <useService.Provider>
         <TestWithIdentityAdapter />
@@ -134,17 +135,21 @@ describe('hoc', () => {
     expect(Test).not.toBeCalled()
   })
 
-  it('Should work with a custom mapProps function', () => {
-    const ConsumeNamespaced = <NS extends string>(props:
+  const ConsumeNamespaced = jest.fn(
+    <NS extends string>(props:
       & Record<NS, Service<typeof useService>>
       & { namespace: NS }
       // @ts-ignore
     ) => <Test { ...props[props.namespace] } />
+  )
 
-    const TestNamespaceAdapter = useService.Adapter(
-      <NS extends string>(viewModel, props: { namespace: NS }) => ({ [props.namespace]: viewModel })
-    )(ConsumeNamespaced)
+  const namespaced = <NS extends string, P>(viewModel, props: { namespace: NS }) =>
+    ({ [props.namespace]: viewModel })
 
+  const TestNamespaceAdapter = useService
+    .Adapter(namespaced)(ConsumeNamespaced)
+
+  it('Should work with a custom mapProps function', () => {
     Test.mockClear()
     render(
       <useService.Provider>
@@ -154,12 +159,61 @@ describe('hoc', () => {
 
     expect(lastProps(Test)).toMatchObject({ isDisabled: false, isOn: false })
   })
+
+  it('Should work with a custom props equality function', () => {
+    const serviceInstance = React.createRef<Service<typeof useService>>()
+
+    render(
+      <useService.Provider ref={serviceInstance}>
+        <TestNamespaceAdapter namespace='viewModel' />
+      </useService.Provider>
+    )
+
+    expect(lastProps(ConsumeNamespaced).viewModel.isOn).toBe(false)
+    ConsumeNamespaced.mockClear()
+    act(() => serviceInstance.current.off())
+    expect(lastProps(ConsumeNamespaced).viewModel.isOn).toBe(false)
+    assert(
+      ConsumeNamespaced.mock.calls.length === 1,
+      'rerender even though viewModel.isOn is unchanged'
+    )
+
+    const TestAdapterWithPropsEquality = useService
+      .Adapter(namespaced, (props, nextProps) => {
+        try { assert.deepStrictEqual(props, nextProps) }
+        catch (e) {
+          if ((e as AssertionError).code === 'ERR_ASSERTION') return false
+          throw e
+        }
+        return true
+      })(ConsumeNamespaced)
+
+    render(
+      <useService.Provider ref={serviceInstance}>
+        <TestAdapterWithPropsEquality namespace='viewModel' />
+      </useService.Provider>
+    )
+
+    expect(lastProps(ConsumeNamespaced).viewModel.isOn).toBe(false)
+    ConsumeNamespaced.mockClear()
+    act(() => serviceInstance.current.off())
+    assert(
+      ConsumeNamespaced.mock.calls.length === 0,
+      'should NOT rerender when viewModel is structurally unchanged'
+    )
+
+    act(() => serviceInstance.current.on())
+    assert(
+      ConsumeNamespaced.mock.calls.length === 1,
+      'should rerender when viewModel.isOn changes'
+    )
+  })
 })
 
 describe('Provider', () => {
   type Instance = Service<typeof useService>
 
-  describe('should foward Service instance', () => {
+  describe('should forward Service instance', () => {
     const testOnMount = (ref: Instance) => {
       expect(
         Object.keys(ref).sort()

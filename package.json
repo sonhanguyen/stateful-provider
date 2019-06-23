@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "start": "builder",
+    "tasks": "builder",
+    "pipeline": "builder run",
     "concurrent": "builder concurrent"
   },
   "files": [

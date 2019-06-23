@@ -6,7 +6,7 @@ const json = require('rollup-plugin-json')
 
 const isProduction = process.env.NODE_ENV === 'production'
 const pkg = require(`${process.cwd()}/package`)
-const extensions = [ '.js', '.jsx', '.ts', '.tsx' ]
+const extensions = [ '.js', '.jsx', '.json', '.ts', '.tsx' ]
 
 module.exports = {
   input: 'index.ts',
@@ -25,8 +25,8 @@ module.exports = {
   ],
   external: Object.keys(pkg.peerDependencies || {}),
   plugins: [
-    json(),
     resolve({ extensions }),
+    json(),
     babel({ extensions, exclude: 'node_modules' }),
     commonjs(),
     sourceMaps()
