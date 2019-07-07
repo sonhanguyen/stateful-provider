@@ -1,5 +1,5 @@
 import * as React from 'react'
-import createHook, { Service } from '.'
+import createHook, { createAdapter, Service } from '.'
 import { render, act } from '@testing-library/react'
 import assert, { AssertionError } from 'assert'
 
@@ -16,14 +16,16 @@ const actions = {
 
 const useService = createHook(factory, actions)
 
-const Test = jest.fn((viewModel: Service<typeof useService>) =>
-  <>{ Object
-      .keys(actions)
-      .map(key =>
-        <button id={key} key={key} onClick={() => viewModel[key]()} />
-      )
-    }
-  </>
+const Test = jest.fn(
+  (props:
+    & { children?: React.ReactNode }
+    & Service<typeof useService>
+  ) => Object
+    .keys(actions)
+    .map<React.ReactNode>(key =>
+      <button id={key} key={key} onClick={() => props[key]()} />
+    )
+    .concat(props.children) as any
 )
 
 const lastProps = ({ mock }: jest.Mock) => {
@@ -32,7 +34,7 @@ const lastProps = ({ mock }: jest.Mock) => {
   return props
 }
 
-const TestWithIdentityAdapter = useService.Adapter()(Test)
+const TestWithIdentityAdapter = createAdapter(useService)(Test)
 
 describe('Stateless', () => {
   it('Should render', () => {
@@ -59,7 +61,7 @@ describe('Stateless', () => {
 
   it('Should provide stateless service object if actions are not provided', () => {
     const useStatelessService = createHook(factory)
-    const TestStatelessService = useStatelessService.Adapter()(Test)
+    const TestStatelessService = createAdapter(useStatelessService)(Test)
 
     Test.mockClear()
     render(
@@ -135,29 +137,34 @@ describe('hoc', () => {
     expect(Test).not.toBeCalled()
   })
 
-  const ConsumeNamespaced = jest.fn(
-    <NS extends string>(props:
-      & Record<NS, Service<typeof useService>>
-      & { namespace: NS }
-      // @ts-ignore
-    ) => <Test { ...props[props.namespace] } />
+  const ConsumeNamespaced = jest.fn((props: {
+    viewModel: Service<typeof useService>
+    children?: React.ReactNode
+  }) =>
+    <Test { ...props.viewModel }>
+      {props.children}
+    </Test>
   )
 
-  const namespaced = <NS extends string, P>(viewModel, props: { namespace: NS }) =>
-    ({ [props.namespace]: viewModel })
+  const connect = () => {
+    const viewModel = useService()
+    return { viewModel }
+  }
 
-  const TestNamespaceAdapter = useService
-    .Adapter(namespaced)(ConsumeNamespaced)
+  const TestNamespaceAdapter = createAdapter(connect)(ConsumeNamespaced)
 
-  it('Should work with a custom mapProps function', () => {
+  it('Should pass props through along with injected props', () => {
     Test.mockClear()
+
     render(
       <useService.Provider>
-        <TestNamespaceAdapter namespace='viewModel' />
+        <TestNamespaceAdapter>
+          Test
+        </TestNamespaceAdapter>
       </useService.Provider>
     )
 
-    expect(lastProps(Test)).toMatchObject({ isDisabled: false, isOn: false })
+    expect(lastProps(Test)).toMatchObject({ isDisabled: false, isOn: false, children: 'Test' })
   })
 
   it('Should work with a custom props equality function', () => {
@@ -165,7 +172,7 @@ describe('hoc', () => {
 
     render(
       <useService.Provider ref={serviceInstance}>
-        <TestNamespaceAdapter namespace='viewModel' />
+        <TestNamespaceAdapter />
       </useService.Provider>
     )
 
@@ -178,8 +185,8 @@ describe('hoc', () => {
       'rerender even though viewModel.isOn is unchanged'
     )
 
-    const TestAdapterWithPropsEquality = useService
-      .Adapter(namespaced, (props, nextProps) => {
+    const TestAdapterWithPropsEquality =
+      createAdapter(connect, (props, nextProps) => {
         try { assert.deepStrictEqual(props, nextProps) }
         catch (e) {
           if ((e as AssertionError).code === 'ERR_ASSERTION') return false
@@ -190,7 +197,7 @@ describe('hoc', () => {
 
     render(
       <useService.Provider ref={serviceInstance}>
-        <TestAdapterWithPropsEquality namespace='viewModel' />
+        <TestAdapterWithPropsEquality />
       </useService.Provider>
     )
 

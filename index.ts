@@ -1,35 +1,25 @@
 import * as React from 'react'
 
-type AdapterFactory<T, HookProps extends {} = {}> = <Map extends MapProps<T> = MapProps<T, T>>
-  (_?: Map, compare?: (props: ReturnType<Map>, nextProps: ReturnType<Map>) => boolean) =>
-    <P extends Injected, Injected = ReturnType<Map>>(_: React.ComponentType<P>) => React.ComponentType<
-      & HookProps
-      & Options<Map>
-      & Partial<Injected>
-      & Pick<P, Exclude<keyof P, keyof Injected>>
-    >
+type AdapterFactory = <Options extends {}, ToInject extends {}>(
+  hook: (_?: Options) => ToInject,
+  compare?: <P extends {}>(props: P, nextProps: P) => boolean
+) => <P>(_: React.ComponentType<P>) => React.ComponentType<
+  & Parameters<typeof compare>[0]
+  & Options
+  & Partial<ToInject>
+  & Pick<P, Exclude<keyof P, keyof ToInject>>
+>
 
-const debugId = ({ name = '', displayName }: any) => displayName || name
+export const createAdapter: AdapterFactory = (hook, propsAreEqual) => component => {
+  const memoised = React.memo(component, propsAreEqual)
 
-const createAdapterFactory = <T, P = {}>(hook: (_?: P) => T): AdapterFactory<T, P> =>
-  (map = identity as any, propsAreEqual) => component => {
-    const memoised = React.memo(component, propsAreEqual)
-
-    return Object.assign(
-      (props: P) => React.createElement(memoised, {
-        ...map(hook(props), props),
-        ...props
-      }),
-      { displayName: `${debugId(hook)}(${map.name || mapProps.name})` +
-        `(${debugId(component)})`
-      }
-    )
-  }
+  return props => React.createElement(memoised, {
+    ...hook(props), props,
+    ...props
+  } as any)
+}
 
 export const identity = <T>(_: T) => _
-
-type MapProps<From = any, To = any, Props extends {} = {}> = (_: From, options?: Props) => To
-type Options<A extends MapProps> = A extends MapProps<any, any, infer P> ? P : {}
 
 type Mutations<T> = {
   [K in keyof T]: T[K] extends (..._) => any
@@ -55,8 +45,7 @@ const createMutations = <T, M extends Updates<T>>(
 }
 
 export type ProviderModule<T, P = {}> = {
-  (): T // hook
-  Adapter: AdapterFactory<T>
+  (): T
   Provider: React.ForwardRefExoticComponent<
     & React.PropsWithoutRef<ProviderProps<P>>
     & React.RefAttributes<T>
@@ -80,7 +69,7 @@ const useUnboundRef = <T>(value, ref?: React.Ref<T>) => {
   }, [])
 }
 
-export const createStore = <
+export const createReader = <
   State,
   UpdateFactories extends Updates<State>,
   Props extends {} = {},
@@ -114,8 +103,7 @@ const createHook = <
 ) => {
   const context = React.createContext({})
   const useBoundContext = () => React.useContext(context)
-  const Adapter = createAdapterFactory(useBoundContext)
-  const useStore = createStore(initial, updates)
+  const useStore = createReader(initial, updates)
 
   type Service = ReturnType<typeof useStore>
 
@@ -128,7 +116,7 @@ const createHook = <
     return React.createElement(context.Provider, { children, value })
   })
 
-  return Object.assign(useBoundContext, { Provider, Adapter }) as ProviderModule<Service, Props>
+  return Object.assign(useBoundContext, { Provider }) as ProviderModule<Service, Props>
 }
 
 export default createHook
@@ -152,8 +140,3 @@ const reducer = <T>(state: T, update: Update<T>): T => {
     ? { ...state, ...nextState }
     : state
 }
-
-export const mapProps = <T, P>(
-  map: (_: P) => T,
-  compare?: (props: T, nextProps: T) => boolean
-) => createAdapterFactory(map)(undefined, compare)
